@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cosmos Hand: Rotación y Sonido Generativo</title>
+    <title>Cosmos Hand: Cámara Centrada</title>
     
     <!-- LIBRERÍAS DE IA -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
@@ -21,7 +21,7 @@
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Inter', sans-serif; user-select: none; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         
-        /* UI Layer */
+        /* UI Layer (Arriba a la izquierda) */
         #ui-layer {
             position: absolute; top: 20px; left: 20px; z-index: 10;
             display: flex; flex-direction: column; gap: 10px;
@@ -41,10 +41,20 @@
         button:disabled { background: #555; color: #888; cursor: not-allowed; }
         button.stop { background: linear-gradient(45deg, #ff4444, #cc0000); color: white; }
 
-        /* Cámara */
+        /* Cámara (CENTRADA ABAJO) */
         #cam-container {
-            position: absolute; bottom: 20px; right: 20px; width: 240px; height: 180px; z-index: 10;
-            border-radius: 12px; overflow: hidden; border: 2px solid rgba(0, 255, 255, 0.3); background: #000;
+            position: absolute; 
+            bottom: 20px; 
+            left: 50%; /* Punto de anclaje al centro */
+            transform: translateX(-50%); /* Desplazamiento para centrar exactamente */
+            width: 240px; 
+            height: 180px; 
+            z-index: 10;
+            border-radius: 12px; 
+            overflow: hidden; 
+            border: 2px solid rgba(0, 255, 255, 0.3); 
+            background: #000;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.1); /* Brillo sutil */
         }
         #video, #output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
         #video { object-fit: cover; opacity: 0.6; }
