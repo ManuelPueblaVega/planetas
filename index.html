@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cosmos Hand Controller</title>
+    <title>Cosmos Hand Controller (MIDI Fix)</title>
     
-    <!-- LIBRERÍAS DE IA -->
+    <!-- LIBRERÍAS DE IA (MediaPipe & TensorFlow) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.18.0/dist/tf-core.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.18.0/dist/tf-backend-webgl.min.js" crossorigin="anonymous"></script>
@@ -32,7 +32,7 @@
             z-index: 1;
         }
 
-        /* Interfaz de Usuario (UI) - Hacemos la ventana mucho más pequeña */
+        /* UI Layer */
         #ui-layer {
             position: absolute;
             top: 20px;
@@ -40,17 +40,18 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            gap: 10px; /* Menos espacio entre elementos */
-            background: rgba(0, 0, 0, 0.6); /* Un poco más oscuro para contraste */
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.75);
             backdrop-filter: blur(10px);
-            padding: 15px; /* Menos padding */
+            padding: 15px;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: white;
-            width: 200px; /* Más estrecho (antes 280px) */
+            width: 220px;
             transition: opacity 0.5s;
-            transform: scale(0.9); /* Escala general al 90% */
+            transform: scale(0.95);
             transform-origin: top left;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         
         #ui-layer.disabled {
@@ -60,48 +61,65 @@
 
         h1 {
             font-family: 'Orbitron', sans-serif;
-            font-size: 1rem; /* Texto más pequeño */
-            margin: 0 0 5px 0;
+            font-size: 1.1rem;
+            margin: 0 0 10px 0;
             color: #00ffff;
             text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
             text-align: center;
+            border-bottom: 1px solid rgba(0,255,255,0.2);
+            padding-bottom: 10px;
         }
 
         .control-group {
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 4px;
+            margin-bottom: 5px;
         }
 
         label {
-            font-size: 0.7rem; /* Etiquetas más pequeñas */
+            font-size: 0.75rem;
             color: #aaa;
+            font-weight: 500;
         }
 
         select, input[type="color"] {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid #444;
             color: white;
-            padding: 4px; /* Inputs más compactos */
+            padding: 6px;
             border-radius: 6px;
             outline: none;
             font-family: 'Inter', sans-serif;
             cursor: pointer;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        select:hover {
+            border-color: #00ffff;
+        }
+
+        /* Estilo específico para el selector MIDI */
+        #midiSelect {
+            background: rgba(0, 50, 50, 0.3);
+            border: 1px solid #008888;
+            color: #00ffff;
         }
 
         button {
             background: linear-gradient(45deg, #00ffff, #0088ff);
             border: none;
-            padding: 8px; /* Botón más compacto */
+            padding: 10px;
             color: black;
             font-weight: bold;
             border-radius: 6px;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             font-family: 'Orbitron', sans-serif;
-            font-size: 0.8rem;
-            margin-top: 5px;
+            font-size: 0.9rem;
+            margin-top: 10px;
         }
 
         button:hover {
@@ -116,7 +134,7 @@
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 240px; /* Un poco más grande para ver bien las líneas */
+            width: 240px;
             height: 180px;
             z-index: 10;
             border-radius: 12px;
@@ -126,20 +144,18 @@
             background: #000;
         }
 
-        /* Video y Canvas superpuestos */
         #video, #output-canvas {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            transform: scaleX(-1); /* Efecto espejo para ambos */
+            transform: scaleX(-1);
         }
         
         #video {
             object-fit: cover;
-            opacity: 0.6; /* Un poco más oscuro para que resalten las líneas */
+            opacity: 0.6;
         }
 
-        /* Overlay de estado sobre la cámara */
         #status-overlay {
             position: absolute;
             top: 10px;
@@ -195,6 +211,13 @@
         <h1>Cosmos Ctrl</h1>
         
         <div class="control-group">
+            <label>Salida MIDI</label>
+            <select id="midiSelect">
+                <option value="">Pulsa INICIAR para detectar</option>
+            </select>
+        </div>
+
+        <div class="control-group">
             <label>Forma</label>
             <select id="shapeSelect">
                 <option value="saturn">Saturno</option>
@@ -208,10 +231,9 @@
             <label>Color</label>
             <input type="color" id="colorPicker" value="#00ffff">
         </div>
-
+        
         <div class="control-group">
-            <label>Audio/MIDI</label>
-            <div id="midiStatus" style="font-size: 0.65rem; color: #888;">Standby</div>
+            <label id="info-label" style="font-size: 0.65rem; color: #888;">Sistema en espera</label>
         </div>
 
         <button id="startButton" disabled>CARGANDO...</button>
@@ -228,13 +250,13 @@
         // --- CONFIGURACIÓN ---
         const config = {
             particleCount: 2000,
-            handOpenThreshold: 0.7, 
             smoothing: 0.1
         };
 
         let state = {
             isPlaying: false,
             handOpenness: 0, 
+            prevHandOpenness: 0,
             handX: 0, handY: 0,        
             currentShape: 'saturn',
             baseColor: new THREE.Color(0x00ffff),
@@ -243,6 +265,7 @@
         };
 
         // MIDI & Audio
+        let midiAccess = null;
         let midiOutput = null;
         let audioCtx = null; 
         const notesScale = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79]; 
@@ -257,10 +280,87 @@
         const loadingText = document.getElementById('loadingText');
         const shapeSelect = document.getElementById('shapeSelect');
         const colorPicker = document.getElementById('colorPicker');
-        const midiStatus = document.getElementById('midiStatus');
+        const midiSelect = document.getElementById('midiSelect');
         const uiLayer = document.getElementById('ui-layer');
+        const infoLabel = document.getElementById('info-label');
 
-        // --- 1. SISTEMA 3D ---
+        // --- 1. GESTIÓN MIDI (ESTILO NARIZ1.HTML) ---
+        // Se ejecuta SOLO al hacer clic en INICIAR
+        
+        async function initMIDI() {
+            try {
+                // Siempre iniciamos el contexto de audio web por si acaso
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) { console.log("AudioContext no soportado"); }
+
+            if (!navigator.requestMIDIAccess) {
+                midiSelect.innerHTML = "<option>Navegador sin MIDI</option>";
+                midiSelect.disabled = true;
+                infoLabel.textContent = "Modo: Solo Audio Web";
+                return;
+            }
+
+            try {
+                // SOLICITUD DE ACCESO (Ahora dentro del gesto de usuario)
+                midiAccess = await navigator.requestMIDIAccess();
+                
+                // Si llegamos aquí, ¡tenemos permiso!
+                updateMidiOutputs();
+                midiAccess.onstatechange = updateMidiOutputs; 
+                
+                infoLabel.textContent = "Conexión MIDI: ÉXITO";
+                infoLabel.style.color = "#00ff00";
+
+            } catch (err) {
+                console.warn("Error al solicitar MIDI:", err);
+                midiSelect.innerHTML = "<option>Bloqueado / Error</option>";
+                midiSelect.disabled = true;
+                infoLabel.textContent = "Usando Audio Web (MIDI Bloqueado)";
+                infoLabel.style.color = "#ffff00";
+            }
+        }
+
+        function updateMidiOutputs() {
+            // Guardar selección actual si existe
+            const currentSelection = midiSelect.value;
+            midiSelect.innerHTML = "";
+            
+            const outputs = Array.from(midiAccess.outputs.values());
+            
+            if (outputs.length === 0) {
+                const option = document.createElement("option");
+                option.text = "No se encontraron dispositivos";
+                midiSelect.add(option);
+                midiOutput = null;
+                return;
+            }
+
+            // Llenar el select
+            outputs.forEach(output => {
+                const option = document.createElement("option");
+                option.value = output.id;
+                option.text = output.name;
+                midiSelect.add(option);
+            });
+
+            // Lógica de selección inteligente
+            if (currentSelection && outputs.some(o => o.id === currentSelection)) {
+                midiSelect.value = currentSelection; // Mantener selección
+                midiOutput = midiAccess.outputs.get(currentSelection);
+            } else if (outputs.length > 0) {
+                midiOutput = outputs[0]; // Seleccionar el primero por defecto
+                midiSelect.value = outputs[0].id;
+            }
+        }
+
+        midiSelect.addEventListener('change', (e) => {
+            if (!midiAccess) return;
+            midiOutput = midiAccess.outputs.get(e.target.value);
+            console.log("Salida MIDI cambiada a:", midiOutput.name);
+        });
+
+
+        // --- 2. SISTEMA 3D ---
         let scene, camera, renderer, particles, geometry, material;
         let positionsOriginal = []; 
 
@@ -393,7 +493,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // --- 2. ANIMACIÓN ---
+        // --- 3. ANIMACIÓN Y LÓGICA ---
         function animate() {
             requestAnimationFrame(animate);
             if (!state.isPlaying) {
@@ -405,12 +505,14 @@
             const positions = geometry.attributes.position.array;
             const openFactor = state.handOpenness; 
             
+            // Movimiento basado en mano
             particles.rotation.y += 0.001 + (state.handX * 0.01);
             particles.rotation.x = (state.handY - 0.5) * 0.5;
 
             const targetScale = 0.5 + (openFactor * 1.5);
             particles.scale.setScalar(THREE.MathUtils.lerp(particles.scale.x, targetScale, 0.05));
 
+            // Física de partículas
             for (let i = 0; i < config.particleCount; i++) {
                 const target = positionsOriginal[i];
                 const ix = i*3;
@@ -425,45 +527,74 @@
             }
             geometry.attributes.position.needsUpdate = true;
             renderer.render(scene, camera);
+            
             handleAudioLogic();
         }
 
-        // --- 3. AUDIO/MIDI ---
         function handleAudioLogic() {
+            // Controlar velocidad de notas con la apertura de la mano
             const minInterval = 80, maxInterval = 800;
             state.noteInterval = minInterval + (state.handOpenness * (maxInterval - minInterval));
 
+            // Disparar nota si pasó el tiempo
             if (Date.now() - state.lastNoteTime > state.noteInterval) {
                 playNote();
                 state.lastNoteTime = Date.now();
             }
+
+            // Enviar CC (Control Change) solo si cambia significativamente para no saturar MIDI
             if (midiOutput) {
-                try { midiOutput.send([0xB0, 1, Math.floor(state.handOpenness * 127)]); } catch(e) {}
+                const ccValue = Math.floor(state.handOpenness * 127);
+                const lastCC = Math.floor(state.prevHandOpenness * 127);
+                if (Math.abs(ccValue - lastCC) > 2) { // Umbral de cambio
+                    try { 
+                        // CC #1 (Mod Wheel) en Canal 1
+                        midiOutput.send([0xB0, 1, ccValue]); 
+                        state.prevHandOpenness = state.handOpenness;
+                    } catch(e) {}
+                }
             }
         }
 
         function playNote() {
+            // Elegir nota basada en la posición X de la mano
             const noteIndex = Math.floor(state.handX * notesScale.length);
             const safeIndex = Math.max(0, Math.min(noteIndex, notesScale.length - 1));
             const note = notesScale[safeIndex];
+            
+            // Duración y Velocidad (volumen)
             const durationMs = state.handOpenness > 0.5 ? 500 : 80; 
             const velocity = 80 + Math.floor(Math.random() * 30); 
 
+            // Efecto visual: Flash de color
             geometry.attributes.color.setXYZ(0, 1, 1, 1); 
             geometry.attributes.color.needsUpdate = true;
 
+            // 1. INTENTAR MIDI PRIMERO
             if (midiOutput) {
                 try {
+                    // Note On (Canal 1: 0x90)
                     midiOutput.send([0x90, note, velocity]);
-                    setTimeout(() => midiOutput.send([0x80, note, 0]), durationMs);
-                    return;
-                } catch (e) {}
+                    
+                    // Note Off programado
+                    setTimeout(() => {
+                        try { midiOutput.send([0x80, note, 0]); } catch(e){}
+                    }, durationMs);
+                    
+                    return; // Si MIDI funciona, no usar audio web
+                } catch (e) {
+                    console.warn("Fallo envio MIDI", e);
+                }
             } 
+            
+            // 2. FALLBACK A AUDIO WEB (Sintetizador interno)
             if (audioCtx) playInternalSynth(note, durationMs / 1000);
         }
 
         function playInternalSynth(midiNote, durationSec) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            if (!audioCtx) return;
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
@@ -478,79 +609,37 @@
             osc.start(); osc.stop(audioCtx.currentTime + durationSec + 0.1);
         }
 
-        async function initMIDI() {
-            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
-            if (!navigator.requestMIDIAccess) {
-                midiStatus.textContent = "Sin soporte MIDI. Audio Web OK.";
-                return;
-            }
-            try {
-                const midiAccess = await navigator.requestMIDIAccess();
-                const outputs = Array.from(midiAccess.outputs.values());
-                if (outputs.length > 0) {
-                    midiOutput = outputs.find(o => o.name.includes("IAC")) || outputs[0];
-                    midiStatus.textContent = `MIDI: ${midiOutput.name}`;
-                    midiStatus.style.color = "#00ff00";
-                } else {
-                    midiStatus.textContent = "Sin Disp. MIDI. Audio Web OK.";
-                }
-            } catch (err) {
-                midiStatus.textContent = "MIDI Bloqueado. Audio Web OK.";
-                midiStatus.style.color = "#ff5555";
-            }
-        }
 
-        // --- 4. DIBUJO DE MANO Y LÍNEAS VERDES ---
+        // --- 4. DIBUJO Y DETECCIÓN (MediaPipe) ---
         function drawHand(keypoints) {
             ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
-            
-            // Estilos de dibujo
-            ctx.strokeStyle = '#00ff00'; // Líneas verdes estilo MediaPipe
+            ctx.strokeStyle = '#00ff00';
             ctx.lineWidth = 2;
-            ctx.fillStyle = '#ff0000';   // Puntos rojos
+            ctx.fillStyle = '#ff0000';
 
-            // Definir dedos (índices de los puntos)
-            const fingers = [
-                [0, 1, 2, 3, 4],     // Pulgar
-                [0, 5, 6, 7, 8],     // Índice
-                [9, 10, 11, 12],     // Medio (conectaremos 0-9 abajo)
-                [13, 14, 15, 16],    // Anular (conectaremos 0-13 abajo)
-                [0, 17, 18, 19, 20]  // Meñique
-            ];
+            const fingers = [[0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [0, 17, 18, 19, 20]];
 
-            // Dibujar Conexiones
             ctx.beginPath();
-            
-            // Palma base
-            ctx.moveTo(keypoints[0].x, keypoints[0].y);
-            ctx.lineTo(keypoints[5].x, keypoints[5].y);
-            ctx.moveTo(keypoints[0].x, keypoints[0].y);
-            ctx.lineTo(keypoints[17].x, keypoints[17].y);
-            ctx.moveTo(keypoints[5].x, keypoints[5].y);
-            ctx.lineTo(keypoints[9].x, keypoints[9].y);
-            ctx.lineTo(keypoints[13].x, keypoints[13].y);
-            ctx.lineTo(keypoints[17].x, keypoints[17].y);
+            // Conexiones palma
+            ctx.moveTo(keypoints[0].x, keypoints[0].y); ctx.lineTo(keypoints[5].x, keypoints[5].y);
+            ctx.moveTo(keypoints[0].x, keypoints[0].y); ctx.lineTo(keypoints[17].x, keypoints[17].y);
+            ctx.moveTo(keypoints[5].x, keypoints[5].y); ctx.lineTo(keypoints[9].x, keypoints[9].y);
+            ctx.lineTo(keypoints[13].x, keypoints[13].y); ctx.lineTo(keypoints[17].x, keypoints[17].y);
 
-            // Dedos
             fingers.forEach(finger => {
                 for (let i = 0; i < finger.length - 1; i++) {
                     const start = keypoints[finger[i]];
                     const end = keypoints[finger[i+1]];
-                    ctx.moveTo(start.x, start.y);
-                    ctx.lineTo(end.x, end.y);
+                    ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y);
                 }
             });
             ctx.stroke();
 
-            // Dibujar Puntos
             keypoints.forEach(kp => {
-                ctx.beginPath();
-                ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI);
-                ctx.fill();
+                ctx.beginPath(); ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI); ctx.fill();
             });
         }
 
-        // --- 5. DETECCIÓN ---
         let handDetector;
 
         async function setupCamera() {
@@ -561,7 +650,6 @@
             return new Promise((resolve) => {
                 video.onloadedmetadata = () => {
                     video.play();
-                    // Ajustar canvas al tamaño real del video
                     outputCanvas.width = video.videoWidth;
                     outputCanvas.height = video.videoHeight;
                     resolve(video);
@@ -572,6 +660,10 @@
         async function bootApp() {
             try {
                 init3D();
+                
+                // NOTA: YA NO llamamos a initMIDI() aquí automáticamente.
+                // Esperamos al click del usuario.
+
                 loadingText.textContent = "Cargando IA...";
                 
                 const model = handPoseDetection.SupportedModels.MediaPipeHands;
@@ -590,6 +682,7 @@
                 
             } catch (err) {
                 loadingText.textContent = "Error: " + err.message;
+                console.error(err);
             }
         }
 
@@ -602,10 +695,8 @@
                 const hand = hands[0]; 
                 const kp = hand.keypoints;
                 
-                // DIBUJAR ESQUELETO
                 drawHand(kp);
 
-                // Lógica de posición y apertura
                 const palmBase = kp[0];
                 state.handX = 1 - (palmBase.x / video.videoWidth); 
                 state.handY = 1 - (palmBase.y / video.videoHeight);
@@ -627,7 +718,7 @@
                 statusOverlay.textContent = `Apertura: ${(state.handOpenness*100).toFixed(0)}%`;
 
             } else {
-                ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height); // Limpiar si no hay mano
+                ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
                 statusOverlay.textContent = "Buscando mano...";
                 state.handOpenness = state.handOpenness * 0.95; 
             }
@@ -642,9 +733,16 @@
             } else {
                 startButton.textContent = "...";
                 startButton.disabled = true;
-                await initMIDI();
+                
+                // INICIO DE AUDIO/MIDI DENTRO DEL GESTO (CLIC)
+                // Esto es crucial para que funcione como nariz1.html
                 if(audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+                
+                // Pedimos MIDI justo aquí
+                await initMIDI(); 
+
                 await setupCamera();
+                
                 state.isPlaying = true;
                 startButton.textContent = "STOP";
                 startButton.classList.add('stop');
